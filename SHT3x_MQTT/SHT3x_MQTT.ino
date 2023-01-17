@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "Adafruit_SHT31.h"
+#include <esp_task_wdt.h>
+#define WDT_TIMEOUT 60
 
 #include "auth.h"
 
@@ -58,6 +60,7 @@ void mqtt_callback(char* topic, byte* message, unsigned int len) {
     messageTemp += (char)message[i];
   }
   Serial.println();
+  esp_task_wdt_reset();
 
   // Feel free to add more if statements to control more GPIOs with MQTT
   // If a message is received on the topic esp32/output, you check if the message is either "on" or "off".
@@ -126,6 +129,8 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(mqtt_callback);
+  esp_task_wdt_init(WDT_TIMEOUT, true);
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
 }
 
 long lastPublishTime = millis();
@@ -143,18 +148,20 @@ void loop() {
   if (!client.connected()) {
     reconnect();
   }
+  esp_task_wdt_reset();
   client.loop();
+  esp_task_wdt_reset();
 
   digitalWrite(LED_1, HIGH);
   // __asm__ __volatile__ ("nop");
   // delayMicroseconds(1);
   // delay(1);
   digitalWrite(LED_1, LOW);
-  
+
   long current = millis();
   if (current - lastPublishTime < 0 || current - lastPublishTime >= 10000) {
     lastPublishTime = current;
-    
+
     float t = sht31.readTemperature();
     float h = sht31.readHumidity();
     if (!isnan(t)) {  // check if 'is not a number'
@@ -171,6 +178,8 @@ void loop() {
     } else {
       Serial.println("Failed to read humidity");
     }
+    esp_task_wdt_reset();
     publishMQTT(t, h);
+    esp_task_wdt_reset();
   }
 }
