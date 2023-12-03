@@ -8,6 +8,12 @@
 
 #include "auth.h"
 
+const int freq = 5000;
+const int ledChannel1 = 0;
+const int ledChannel2 = 1;
+const int resolution = 8;
+
+const int LED_BRIGHTNESS = 16;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -97,10 +103,13 @@ void reconnect() {
 
 void setup() {
   Serial.begin(115200);
+  ledcSetup(ledChannel1, freq, resolution);
+  ledcSetup(ledChannel2, freq, resolution);
 
   // TWO LEDS
-  pinMode(LED_1, OUTPUT);
-  pinMode(LED_2, OUTPUT);
+  ledcAttachPin(LED_1, ledChannel1);
+  ledcAttachPin(LED_2, ledChannel2);
+  ledcWrite(ledChannel2, LED_BRIGHTNESS);
 
   // I2C GND
   pinMode(2, OUTPUT);
@@ -108,7 +117,8 @@ void setup() {
   Wire.begin(10, 3);   // sda= GPIO_10 /scl= GPIO_3
 
   Serial.println("SHT31 test");
-  if (!sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
+  if (!sht31.begin(0x44)) {
+    // Set to 0x45 for alternate i2c addr
     Serial.println("Couldn't find SHT31");
     while (1) delay(1);
   }
@@ -152,16 +162,18 @@ void loop() {
   client.loop();
   esp_task_wdt_reset();
 
-  digitalWrite(LED_1, HIGH);
+  ledcWrite(ledChannel1, LED_BRIGHTNESS);
+
   // __asm__ __volatile__ ("nop");
   // delayMicroseconds(1);
   // delay(1);
-  digitalWrite(LED_1, LOW);
 
   long current = millis();
   if (current - lastPublishTime < 0 || current - lastPublishTime >= 10000) {
     lastPublishTime = current;
 
+    // No LED means working on MQTT
+    ledcWrite(ledChannel1, 0);
     float t = sht31.readTemperature();
     float h = sht31.readHumidity();
     if (!isnan(t)) {  // check if 'is not a number'
@@ -181,5 +193,7 @@ void loop() {
     esp_task_wdt_reset();
     publishMQTT(t, h);
     esp_task_wdt_reset();
+
+    ledcWrite(ledChannel1, LED_BRIGHTNESS);
   }
 }
